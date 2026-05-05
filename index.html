@@ -3,123 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asset Physical Count</title>
+    <title>ITL Asset Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body { background-color: #f3f4f6; font-family: sans-serif; }
+        #video-container { position: relative; width: 100%; max-width: 400px; margin: auto; overflow: hidden; border-radius: 1rem; }
+        video { width: 100%; height: auto; display: block; }
+        .scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: rgba(34, 197, 94, 0.7); box-shadow: 0 0 10px 2px rgba(34, 197, 94, 0.5); animation: scan 2s infinite linear; }
+        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
     </style>
 </head>
-<body class="p-6">
+<body class="p-4">
     <div id="app" class="max-w-xl mx-auto space-y-4">
-        <h1 class="text-2xl font-bold text-gray-800 text-center">ตรวจนับทรัพย์สินถาวร</h1>
+        <h1 class="text-xl font-bold text-gray-800 text-center">ITL Asset Scanner</h1>
         
-        <div class="bg-white p-6 rounded-2xl shadow-lg space-y-4">
+        <!-- ช่องมองภาพกล้อง (Live Scanner) -->
+        <div id="video-container" class="bg-black shadow-lg">
+            <video id="video" autoplay playsinline></video>
+            <div class="scanner-line"></div>
+            <canvas id="canvas" style="display:none;"></canvas>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl shadow-lg space-y-4">
+            <div class="text-center">
+                <span id="status" class="text-xs font-medium px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full">
+                    🟡 กำลังเริ่มการทำงานของกล้อง...
+                </span>
+            </div>
+
             <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">📸 ถ่ายรูป Asset Tag</label>
-                <input type="file" accept="image/*" capture="environment" id="fileInput" 
-                       class="w-full text-sm border p-2 rounded-lg bg-gray-50">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">รหัสที่ตรวจพบ</label>
+                <input type="text" id="assetCode" placeholder="ส่องกล้องไปที่รหัสทรัพย์สิน..." 
+                       class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-xl font-mono font-bold text-center">
             </div>
             
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">🔢 Asset Code</label>
-                <input type="text" id="assetCode" placeholder="รออ่านค่าจากรูป..." 
-                       class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-lg">
-            </div>
-            
-            <button onclick="addRecord()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-md">
-                ยืนยันการตรวจนับ
+            <button onclick="addRecord()" id="btnConfirm" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition shadow-md">
+                บันทึกการตรวจนับ
             </button>
         </div>
 
-        <div class="bg-white p-6 rounded-2xl shadow-lg">
-            <div class="flex justify-between items-center mb-4 border-b pb-2">
-                <h2 class="font-bold text-gray-700">รายการที่ตรวจแล้ว (<span id="count" class="text-blue-600">0</span>)</h2>
-                <button onclick="exportToCSV()" id="exportBtn" disabled 
-                        class="text-sm border border-blue-500 text-blue-500 px-3 py-1 rounded-lg hover:bg-blue-50 disabled:opacity-30 disabled:border-gray-300 disabled:text-gray-300">
-                    📥 Export CSV
-                </button>
+        <!-- สรุปรายการ -->
+        <div class="bg-white p-5 rounded-2xl shadow-lg">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="font-bold">รายการวันนี้ (<span id="count">0</span>)</h2>
+                <button onclick="exportToCSV()" id="exportBtn" disabled class="text-sm text-blue-600 font-semibold disabled:opacity-30">Export CSV</button>
             </div>
-            <ul id="recordList" class="text-sm text-gray-600 space-y-3">
-                <li class="text-gray-400 italic text-center py-4">ยังไม่มีรายการที่ตรวจนับ</li>
-            </ul>
+            <ul id="recordList" class="text-sm space-y-2 max-h-40 overflow-y-auto"></ul>
         </div>
     </div>
 
     <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const assetInput = document.getElementById('assetCode');
+        const statusText = document.getElementById('status');
         let records = [];
+        let isScanning = true;
 
-        async function handleOCR(file) {
-            const assetInput = document.getElementById('assetCode');
-            assetInput.value = "⏳ กำลังประมวลผลรูปภาพ...";
-            
+        // 1. เริ่มการทำงานของกล้อง
+        async function startCamera() {
             try {
-                const result = await Tesseract.recognize(file, 'eng');
-                assetInput.value = result.data.text.replace(/[^a-zA-Z0-9-]/g, ' ').trim();
-            } catch (error) {
-                assetInput.value = "❌ อ่านไม่สำเร็จ ลองถ่ายใหม่";
-                console.error(error);
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } 
+                });
+                video.srcObject = stream;
+                statusText.innerText = "🟢 พร้อมแสกน (ส่องไปที่รหัส ITL)";
+                statusText.className = "text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded-full";
+                requestAnimationFrame(scanFrame);
+            } catch (err) {
+                statusText.innerText = "❌ ไม่สามารถเข้าถึงกล้องได้";
+                console.error(err);
             }
         }
 
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            if (e.target.files && e.target.files[0]) {
-                handleOCR(e.target.files[0]);
-            }
-        });
-
-        function addRecord() {
-            const codeInput = document.getElementById('assetCode');
-            const code = codeInput.value.trim();
-            
-            if (!code || code.includes("กำลังประมวลผล") || code.includes("อ่านไม่สำเร็จ")) {
-                alert("กรุณารอให้อ่านค่าเสร็จ หรือกรอกรหัสให้ถูกต้อง");
+        // 2. ฟังก์ชันจับภาพจากวิดีโอและส่งไป OCR
+        async function scanFrame() {
+            if (!isScanning) {
+                requestAnimationFrame(scanFrame);
                 return;
             }
 
-            records.push({
-                code: code,
-                time: new Date().toLocaleTimeString('th-TH')
-            });
+            // วาดภาพปัจจุบันจากวิดีโอลงใน Canvas ชั่วคราว
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+            // ส่งรูปไปอ่าน OCR
+            try {
+                const result = await Tesseract.recognize(canvas.toDataURL('image/jpeg'), 'eng');
+                const fullText = result.data.text;
+                const cleanedText = fullText.replace(/[^a-zA-Z0-9]/g, '');
+                
+                // ค้นหารูปแบบ ITL + ตัวเลข 7 หลัก
+                const pattern = /[iI][tT][lL]\d{7}/;
+                const match = cleanedText.match(pattern);
+
+                if (match) {
+                    const foundCode = match[0].toUpperCase();
+                    // ถ้าเจอไม่ซ้ำกับอันที่โชว์อยู่ ให้หยุดแสกนและแสดงผล
+                    if (assetInput.value !== foundCode) {
+                        assetInput.value = foundCode;
+                        statusText.innerText = "🎯 พบรหัสทรัพย์สิน!";
+                        // สั่นเตือนเบาๆ (ถ้ามือถือรองรับ)
+                        if (navigator.vibrate) navigator.vibrate(100);
+                    }
+                }
+            } catch (err) { console.error(err); }
+
+            // วนลูปการแสกนทุก 1.5 วินาทีเพื่อไม่ให้เครื่องร้อนเกินไป
+            setTimeout(() => {
+                requestAnimationFrame(scanFrame);
+            }, 1500);
+        }
+
+        function addRecord() {
+            const code = assetInput.value.trim();
+            if (!/[A-Z]{3}\d{7}/.test(code)) return;
+
+            records.push({ code, time: new Date().toLocaleTimeString('th-TH') });
             updateUI();
-            codeInput.value = "";
-            document.getElementById('fileInput').value = "";
+            
+            // ล้างค่าเพื่อให้แสกนตัวต่อไปได้
+            assetInput.value = "";
+            statusText.innerText = "🟢 พร้อมแสกนตัวต่อไป...";
         }
 
         function updateUI() {
             const list = document.getElementById('recordList');
-            const count = document.getElementById('count');
-            const exportBtn = document.getElementById('exportBtn');
-            
-            count.innerText = records.length;
-            exportBtn.disabled = records.length === 0;
-            
-            if (records.length === 0) {
-                list.innerHTML = '<li class="text-gray-400 italic text-center py-4">ยังไม่มีรายการ</li>';
-            } else {
-                list.innerHTML = records.map((r, index) => `
-                    <li class="flex justify-between items-center bg-gray-50 p-2 rounded-lg border">
-                        <span class="font-mono font-bold">${r.code}</span>
-                        <span class="text-xs text-gray-400">${r.time}</span>
-                    </li>
-                `).reverse().join('');
-            }
+            document.getElementById('count').innerText = records.length;
+            document.getElementById('exportBtn').disabled = records.length === 0;
+            list.innerHTML = records.map(r => `
+                <li class="flex justify-between bg-gray-50 p-2 rounded border border-gray-100">
+                    <span class="font-mono font-bold">${r.code}</span>
+                    <span class="text-gray-400 text-xs">${r.time}</span>
+                </li>
+            `).reverse().join('');
         }
 
         function exportToCSV() {
-            if (records.length === 0) return;
-            const header = ["Asset Code", "Status", "Time"];
-            const rows = records.map(r => [r.code, "Counted", r.time]);
+            const header = ["Asset Code", "Time"];
+            const rows = records.map(r => [r.code, r.time]);
             const csvContent = "\ufeff" + [header, ...rows].map(e => e.join(",")).join("\n");
-            
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = `Asset_Audit_${new Date().toLocaleDateString()}.csv`;
+            link.download = "Asset_Scan_Report.csv";
             link.click();
         }
+
+        // เริ่มต้นแอป
+        startCamera();
     </script>
 </body>
 </html>

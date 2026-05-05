@@ -43,55 +43,69 @@
     </div>
 
     <script>
-        let records = [];
+      let records = [];
 
-        // จำลอง OCR เมื่อเลือกไฟล์
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            if (e.target.files[0]) {
-                const mockResult = "FA-" + Math.floor(Math.random() * 10000);
-                document.getElementById('assetCode').value = mockResult;
-            }
-        });
-
-        function addRecord() {
-            const code = document.getElementById('assetCode').value;
-            if (!code) return;
-
-            const newRecord = {
-                code: code,
-                time: new Date().toLocaleString(),
-                photo: "captured_image.jpg"
-            };
-
-            records.push(newRecord);
-            updateUI();
-            
-            // ล้างค่า
-            document.getElementById('assetCode').value = "";
+    // ฟังก์ชันอ่านข้อความจากรูป (OCR)
+    async function handleOCR(file) {
+        const assetInput = document.getElementById('assetCode');
+        assetInput.value = "กำลังอ่านข้อมูล... (โปรดรอสักครู่)";
+        
+        try {
+            // ใช้ Tesseract อ่านรูปภาพที่ถ่ายมา
+            const result = await Tesseract.recognize(file, 'eng');
+            // นำข้อความที่อ่านได้มาใส่ในช่อง และลบช่องว่างส่วนเกินออก
+            assetInput.value = result.data.text.trim();
+        } catch (error) {
+            assetInput.value = "อ่านรูปไม่สำเร็จ ลองถ่ายใหม่อีกครั้ง";
+            console.error(error);
         }
+    }
 
-        function updateUI() {
-            const list = document.getElementById('recordList');
-            const count = document.getElementById('count');
-            const exportBtn = document.getElementById('exportBtn');
-            
-            list.innerHTML = records.map(r => `<li>${r.code} — ${r.time}</li>`).join('');
-            count.innerText = records.length;
-            exportBtn.disabled = records.length === 0;
+    // เมื่อมีการเลือกไฟล์หรือถ่ายรูป
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        if (e.target.files[0]) {
+            handleOCR(e.target.files[0]);
         }
+    });
 
-        function exportToCSV() {
-            const header = ["Asset Code", "Counted Flag", "Counted Time"];
-            const rows = records.map(r => [r.code, "Y", r.time]);
-            const csvContent = [header, ...rows].map(e => e.join(",")).join("\n");
-            
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = "asset_count.csv";
-            link.click();
-        }
+    function addRecord() {
+        const code = document.getElementById('assetCode').value;
+        if (!code || code.includes("กำลังอ่าน")) return;
+
+        const newRecord = {
+            code: code,
+            time: new Date().toLocaleString(),
+            photo: "captured_asset.jpg"
+        };
+
+        records.push(newRecord);
+        updateUI();
+        document.getElementById('assetCode').value = "";
+        document.getElementById('fileInput').value = ""; // ล้างค่ารูปที่เลือกไว้
+    }
+
+    function updateUI() {
+        const list = document.getElementById('recordList');
+        const count = document.getElementById('count');
+        const exportBtn = document.getElementById('exportBtn');
+        
+        list.innerHTML = records.map(r => `<li>${r.code} — ${r.time}</li>`).join('');
+        count.innerText = records.length;
+        exportBtn.disabled = records.length === 0;
+    }
+
+    function exportToCSV() {
+        const header = ["Asset Code", "Counted Flag", "Counted Time"];
+        const rows = records.map(r => [r.code, "Y", r.time]);
+        const csvContent = [header, ...rows].map(e => e.join(",")).join("\n");
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "asset_count_report.csv";
+        link.click();
+    }
     </script>
 </body>
 </html>

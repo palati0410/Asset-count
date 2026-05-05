@@ -68,7 +68,7 @@
                     video: { facingMode: "environment" } 
                 });
                 video.srcObject = stream;
-                statusText.innerText = "🟢 พร้อมแสกน (ส่องไปที่รหัส ITL)";
+                statusText.innerText = "🟢 พร้อมแสกน (ส่องไปที่รหัส)";
                 statusText.className = "text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded-full";
                 requestAnimationFrame(scanFrame);
             } catch (err) {
@@ -96,9 +96,10 @@
                 const fullText = result.data.text;
                 const cleanedText = fullText.replace(/[^a-zA-Z0-9]/g, '');
                 
-                // ค้นหารูปแบบ ITL + ตัวเลข 7 หลัก
-                const pattern = /[iI][tT][lL]\d{7}/;
-                const match = cleanedText.match(pattern);
+            // 1. ค้นหารูปแบบอักษรภาษาอังกฤษ 3 ตัว + ตัวเลข 7 หลัก
+            const pattern = /[a-zA-Z]{3}\d{7}/; 
+            // 2. นำข้อความที่ Clean แล้วมาตรวจสอบกับ Pattern ใหม่
+            const match = cleanedText.match(pattern);
 
                 if (match) {
                     const foundCode = match[0].toUpperCase();

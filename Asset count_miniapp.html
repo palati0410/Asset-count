@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asset Physical Count</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f3f4f6; font-family: sans-serif; }
+    </style>
+</head>
+<body class="p-6">
+    <div id="app" class="max-w-xl mx-auto space-y-4">
+        <h1 class="text-2xl font-bold text-gray-800">ตรวจนับทรัพย์สินถาวร</h1>
+        
+        <!-- ส่วนการป้อนข้อมูล -->
+        <div class="bg-white p-4 rounded-2xl shadow-md space-y-3">
+            <label class="block text-sm font-medium text-gray-700">ถ่ายรูป Asset Tag</label>
+            <input type="file" accept="image/*" capture="environment" id="fileInput" 
+                   class="w-full text-sm border p-2 rounded-lg">
+            
+            <input type="text" id="assetCode" placeholder="Asset Code (ตรวจสอบจาก OCR)" 
+                   class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            
+            <button onclick="addRecord()" class="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition">
+                ยืนยันการตรวจนับ
+            </button>
+        </div>
+
+        <!-- รายการที่ตรวจแล้ว -->
+        <div class="bg-white p-4 rounded-2xl shadow-md">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="font-semibold">รายการที่ตรวจแล้ว (<span id="count">0</span>)</h2>
+                <button onclick="exportToCSV()" id="exportBtn" disabled 
+                        class="text-sm border border-gray-300 px-3 py-1 rounded hover:bg-gray-50 disabled:opacity-50">
+                    Export Excel
+                </button>
+            </div>
+            <ul id="recordList" class="text-sm text-gray-600 space-y-2 list-disc pl-5">
+                <!-- รายการจะมาโผล่ตรงนี้ -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let records = [];
+
+        // จำลอง OCR เมื่อเลือกไฟล์
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            if (e.target.files[0]) {
+                const mockResult = "FA-" + Math.floor(Math.random() * 10000);
+                document.getElementById('assetCode').value = mockResult;
+            }
+        });
+
+        function addRecord() {
+            const code = document.getElementById('assetCode').value;
+            if (!code) return;
+
+            const newRecord = {
+                code: code,
+                time: new Date().toLocaleString(),
+                photo: "captured_image.jpg"
+            };
+
+            records.push(newRecord);
+            updateUI();
+            
+            // ล้างค่า
+            document.getElementById('assetCode').value = "";
+        }
+
+        function updateUI() {
+            const list = document.getElementById('recordList');
+            const count = document.getElementById('count');
+            const exportBtn = document.getElementById('exportBtn');
+            
+            list.innerHTML = records.map(r => `<li>${r.code} — ${r.time}</li>`).join('');
+            count.innerText = records.length;
+            exportBtn.disabled = records.length === 0;
+        }
+
+        function exportToCSV() {
+            const header = ["Asset Code", "Counted Flag", "Counted Time"];
+            const rows = records.map(r => [r.code, "Y", r.time]);
+            const csvContent = [header, ...rows].map(e => e.join(",")).join("\n");
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "asset_count.csv";
+            link.click();
+        }
+    </script>
+</body>
+</html>
